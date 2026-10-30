@@ -70,6 +70,7 @@ def test_server_serves_page_and_pdf_only_with_valid_token(db):
     server = start_server(site, 0, bind="127.0.0.1")
     base = f"http://127.0.0.1:{server.server_address[1]}"
     try:
+        assert b"no ar" in urllib.request.urlopen(base + "/").read()
         link = receipt_url(base, site.secret, punch)
         page = urllib.request.urlopen(link).read().decode()
         assert "João" in page and punch.hash in page and ".pdf" in page

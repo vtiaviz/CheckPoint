@@ -78,7 +78,13 @@ def make_handler(site: ReceiptSite) -> type[BaseHTTPRequestHandler]:
         server_version = "CheckPoint"
 
         def do_GET(self) -> None:  # nome exigido pelo http.server
-            match = ROUTE.match(self.path.split("?", 1)[0])
+            path = self.path.split("?", 1)[0]
+            if path == "/":
+                # Página de teste: se abre no celular, a rede e o firewall estão OK.
+                self._send(200, "text/plain; charset=utf-8",
+                           b"CheckPoint: servidor de comprovantes no ar.")
+                return
+            match = ROUTE.match(path)
             punch = site.find(int(match[1]), match[2]) if match else None
             if punch is None:
                 self._send(404, "text/plain; charset=utf-8", "Comprovante não encontrado".encode())
