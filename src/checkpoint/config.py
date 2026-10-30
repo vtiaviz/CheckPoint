@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
-import tomllib
+import sys
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
 from typing import Any
+
+if sys.version_info >= (3, 11):
+    import tomllib
+else:  # Ubuntu 22.04 vem com Python 3.10
+    import tomli as tomllib
 
 DEFAULT_CONFIG_FILE = Path("config.toml")
 

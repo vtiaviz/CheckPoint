@@ -8,7 +8,7 @@ Detalhes de escopo, arquitetura e milestones em [docs/plano.md](docs/plano.md).
 
 ## Requisitos
 
-- Python 3.11 ou 3.12 (o MediaPipe, usado a partir do M2, ainda não cobre todas as versões novas)
+- Python 3.10 a 3.12 (o MediaPipe, usado a partir do M2, ainda não cobre todas as versões novas)
 - Webcam USB (testado com Logitech C270, 720p)
 - Windows 10/11 ou Ubuntu LTS
 
