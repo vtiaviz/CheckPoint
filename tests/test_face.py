@@ -38,3 +38,19 @@ def test_embedding_is_normalized(engine):
     embedding = engine.embed(frame, Face(raw))
     assert embedding.shape == (EMBEDDING_SIZE,)
     assert float(np.linalg.norm(embedding)) == pytest.approx(1.0, abs=1e-5)
+
+
+def test_landmark_sensor_blank_frame():
+    from checkpoint.liveness import LandmarkSensor
+    from checkpoint.models import LANDMARKER
+
+    try:
+        path = ensure_model(LANDMARKER, MODELS_DIR, download=False)
+    except ModelError:
+        pytest.skip("modelo do Face Landmarker não baixado")
+    sensor = LandmarkSensor(path)
+    try:
+        assert sensor.measure(np.zeros((480, 640, 3), dtype=np.uint8), 0) is None
+        assert sensor.measure(np.zeros((480, 640, 3), dtype=np.uint8), 0) is None  # mesmo ts
+    finally:
+        sensor.close()

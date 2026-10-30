@@ -17,11 +17,13 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+      - if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libegl1 libgles2
       - run: pip install -e ".[dev]"
       - uses: actions/cache@v4
         with:
           path: models
-          key: models-yunet2023mar-sface2021dec
+          key: models-yunet2023mar-sface2021dec-landmarker1
       - run: python -m checkpoint modelos
       - run: ruff check .
       - run: pytest

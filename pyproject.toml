@@ -12,6 +12,7 @@ license = { text = "Proprietary" }
 dependencies = [
     "numpy>=1.26",
     "opencv-python>=4.9",
+    "mediapipe>=0.10.14",
     "tomli>=2.0; python_version < '3.11'",
 ]
 
@@ -23,6 +24,9 @@ checkpoint = "checkpoint.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+checkpoint = ["assets/minifasnet/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
