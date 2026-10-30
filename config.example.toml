@@ -1,0 +1,24 @@
+# Copie para config.toml e ajuste para a máquina do totem.
+# Caminhos relativos são resolvidos a partir da pasta onde o programa é executado.
+
+[camera]
+# Índice da webcam no sistema (0 = primeira câmera).
+index = 0
+# Resolução de captura. A C270 entrega até 1280x720; os modelos trabalham bem em 640x480.
+width = 640
+height = 480
+fps = 30
+
+[storage]
+data_dir = "data"
+# SQLite no protótipo (um ponto de coleta). Para PostgreSQL, troque a URL.
+database_url = "sqlite:///data/checkpoint.db"
+
+[recognition]
+# Limiar de similaridade de cosseno do SFace. O valor de referência do OpenCV Zoo é 0.363;
+# será calibrado no M1 com fotos reais.
+match_threshold = 0.363
+
+[logging]
+level = "INFO"
+dir = "logs"
