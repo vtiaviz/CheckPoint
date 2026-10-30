@@ -49,6 +49,21 @@ min_interval_min = 2.0
 pin_max_attempts = 3
 pin_lockout_min = 5.0
 
+[company]
+# Dados impressos no comprovante.
+name = "Empresa (protótipo)"
+cnpj = ""
+location = "Portaria"
+
+[receipt]
+# Comprovante em PDF aberto pelo celular via QR code, servido na rede local.
+enabled = true
+port = 8080
+# IP ou nome que o celular usa para chegar a este computador. Vazio = detectar sozinho.
+host = ""
+# Segundos que o QR fica na tela depois da batida (qualquer tecla fecha antes).
+qr_seconds = 10.0
+
 [logging]
 level = "INFO"
 dir = "logs"
