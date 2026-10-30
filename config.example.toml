@@ -64,6 +64,12 @@ host = ""
 # Segundos que o QR fica na tela depois da batida (qualquer tecla fecha antes).
 qr_seconds = 10.0
 
+[panel]
+# Painel web do RH (comando: python -m checkpoint painel).
+port = 8081
+# "0.0.0.0" aceita acesso de outros computadores da rede; "127.0.0.1" só deste computador.
+bind = "0.0.0.0"
+
 [logging]
 level = "INFO"
 dir = "logs"

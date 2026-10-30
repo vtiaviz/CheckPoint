@@ -173,11 +173,19 @@ class PunchLog:
         return Punch(nsr, employee_code, employee_name, punched_at, local_date, kind, method,
                      similarity, real_score, prev_hash, digest)
 
-    def list(self, day: date | None = None, employee_code: str | None = None) -> list[Punch]:
+    def list(self, day: date | None = None, employee_code: str | None = None,
+             start: date | None = None, end: date | None = None) -> list[Punch]:
+        """Marcações por dia exato ou intervalo [start, end], opcionalmente de um funcionário."""
         clauses, params = [], []
         if day is not None:
             clauses.append("local_date = ?")
             params.append(day.isoformat())
+        if start is not None:
+            clauses.append("local_date >= ?")
+            params.append(start.isoformat())
+        if end is not None:
+            clauses.append("local_date <= ?")
+            params.append(end.isoformat())
         if employee_code is not None:
             clauses.append("employee_code = ?")
             params.append(employee_code)

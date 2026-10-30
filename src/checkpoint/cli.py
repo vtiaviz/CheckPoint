@@ -428,6 +428,55 @@ def cmd_receipt(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_panel_password(args: argparse.Namespace) -> int:
+    import getpass
+
+    from checkpoint.panel import PanelError, set_password
+    from checkpoint.storage import Storage
+
+    password = getpass.getpass("Nova senha do painel do RH (mínimo 8 caracteres): ")
+    if password != getpass.getpass("Repita a senha: "):
+        log.error("as senhas não conferem")
+        return 1
+    with Storage.from_url(args.config.storage.database_url) as storage:
+        try:
+            set_password(storage, password)
+        except PanelError as exc:
+            log.error("%s", exc)
+            return 1
+    print("Senha do painel definida.")
+    return 0
+
+
+def cmd_panel(args: argparse.Namespace) -> int:
+    import time
+
+    from checkpoint.panel import PASSWORD_KEY, Panel, start_panel
+    from checkpoint.receipt import local_ip
+    from checkpoint.storage import Storage
+
+    cfg = args.config
+    with Storage.from_url(cfg.storage.database_url) as storage:
+        if storage.get_setting(PASSWORD_KEY) is None:
+            log.error("defina a senha antes: python -m checkpoint senha-painel")
+            return 1
+    try:
+        server = start_panel(Panel(cfg.storage.database_url), cfg.panel.port, cfg.panel.bind)
+    except OSError as exc:
+        log.error("não foi possível abrir a porta %s: %s", cfg.panel.port, exc)
+        return 1
+    host = local_ip() if cfg.panel.bind == "0.0.0.0" else cfg.panel.bind
+    print(f"Painel do RH em http://{host}:{cfg.panel.port} (Ctrl+C para encerrar)")
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        server.shutdown()
+    return 0
+
+
 def cmd_pin(args: argparse.Namespace) -> int:
     import getpass
 
@@ -547,6 +596,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("verificar", help="confere a integridade das marcações").set_defaults(
         func=cmd_verify)
+
+    sub.add_parser("painel", help="painel web do RH (marcações, espelho, funcionários)"
+                   ).set_defaults(func=cmd_panel)
+    sub.add_parser("senha-painel", help="define a senha de acesso ao painel do RH"
+                   ).set_defaults(func=cmd_panel_password)
 
     receipt = sub.add_parser("comprovante", help="gera o PDF do comprovante de uma marcação")
     receipt.add_argument("nsr", type=int)

@@ -78,6 +78,12 @@ class ReceiptConfig:
 
 
 @dataclass(frozen=True)
+class PanelConfig:
+    port: int = 8081
+    bind: str = "0.0.0.0"  # "127.0.0.1" deixa o painel acessível só neste computador
+
+
+@dataclass(frozen=True)
 class LoggingConfig:
     level: str = "INFO"
     dir: Path = Path("logs")
@@ -93,6 +99,7 @@ class Config:
     punch: PunchConfig = field(default_factory=PunchConfig)
     company: CompanyConfig = field(default_factory=CompanyConfig)
     receipt: ReceiptConfig = field(default_factory=ReceiptConfig)
+    panel: PanelConfig = field(default_factory=PanelConfig)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
 
 
@@ -150,6 +157,8 @@ def _validate(config: Config) -> None:
         raise ConfigError("[receipt] port deve estar entre 1 e 65535")
     if config.receipt.qr_seconds < 0:
         raise ConfigError("[receipt] qr_seconds não pode ser negativo")
+    if not 1 <= config.panel.port <= 65535:
+        raise ConfigError("[panel] port deve estar entre 1 e 65535")
     if config.logging.level.upper() not in {"DEBUG", "INFO", "WARNING", "ERROR"}:
         raise ConfigError("[logging] level deve ser DEBUG, INFO, WARNING ou ERROR")
 
