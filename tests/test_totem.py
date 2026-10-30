@@ -127,3 +127,37 @@ def test_wrong_pin_three_times_locks(storage, monkeypatch):
     said = run(storage, monkeypatch, [MANUAL] * 4, typed=typed)
     assert said == ["PIN RECUSADO: matrícula 001"] * 3
     assert storage.punches.list() == []
+
+
+def test_qr_shown_after_punch(storage, monkeypatch):
+    shown = []
+    monkeypatch.setattr(totem, "show_qr", lambda frames, url, text, seconds: shown.append(url)
+                        or True)
+    queue = [ana()]
+    monkeypatch.setattr(app, "wait_for_employee",
+                        lambda *a, **k: queue.pop(0) if queue else None)
+    monkeypatch.setattr(app, "verify_liveness",
+                        lambda *a, **k: LivenessResult(True, real_score=0.97))
+    monkeypatch.setattr(app, "wait_until_gone", lambda *a, **k: True)
+    said = []
+    run_totem(Config(), None, None, None, storage, frames(), announce=said.append,
+              receipt_url_for=lambda p: f"http://totem/c/{p.nsr}/tok")
+    assert shown == ["http://totem/c/1/tok"]
+    assert said[-1] == "Comprovante: http://totem/c/1/tok"
+
+
+def test_show_qr_draws_code_and_closes_on_key(monkeypatch):
+    views = []
+
+    def fake_show(view):
+        views.append(view.copy())
+        SCREEN.last_key = ord(" ") if len(views) == 2 else -1
+        return True
+
+    monkeypatch.setattr(totem, "show", fake_show)
+    frame = np.full((480, 640, 3), 90, np.uint8)
+    assert totem.show_qr(iter([frame] * 10), "http://x/c/1/t", "Entrada", 30.0) is True
+    assert len(views) == 2
+    # Há módulos pretos e brancos puros na área do QR, à direita.
+    region = views[0][130:350, 400:630]
+    assert (region == 0).any() and (region == 255).any()

@@ -42,6 +42,7 @@ python -m checkpoint totem               # modo totem: reconhece, confirma e reg
 python -m checkpoint pin 001             # define o PIN (batida por matrícula + PIN, tecla M)
 python -m checkpoint marcacoes           # marcações de hoje (--data AAAA-MM-DD, --todas)
 python -m checkpoint verificar           # confere NSR e cadeia de hash das marcações
+python -m checkpoint comprovante 1       # salva o PDF do comprovante da marcação NSR 1
 
 python -m checkpoint ponto               # simula a batida sem registrar (teste)
 python -m checkpoint vivacidade          # sinais da prova de vida ao vivo, para calibrar
@@ -60,6 +61,12 @@ alterar ou apagar marcações, e `verificar` detecta qualquer adulteração feit
 pode usar a biometria aperta M e digita matrícula e PIN (a marcação fica identificada como
 "PIN"); três PINs errados bloqueiam a matrícula por 5 minutos. Batidas repetidas em menos de
 2 minutos são ignoradas. Ajustes em `[punch]`.
+
+Depois de cada batida, o totem mostra um QR code por 10 segundos. Lido pelo celular **na mesma
+rede**, ele abre o comprovante (página e PDF) servido pelo próprio totem na porta 8080. O link
+leva um token secreto, então não dá para abrir o comprovante de outra pessoa trocando o número.
+No Windows, na primeira vez, o Firewall pergunta se o Python pode aceitar conexões: libere em
+**redes privadas**. Dados da empresa em `[company]` e ajustes em `[receipt]`.
 
 No cadastro, olhe para a câmera e mexa levemente a cabeça; o sistema recusa se aparecer mais de
 uma pessoa, se as amostras forem de pessoas diferentes ou se o rosto já estiver cadastrado.
@@ -80,5 +87,6 @@ ruff check .
 Só são usados componentes que permitem uso comercial: OpenCV e modelos YuNet/SFace do OpenCV Zoo
 (Apache 2.0/MIT), NumPy (BSD), MediaPipe e o modelo Face Landmarker (Apache 2.0) e os modelos
 MiniFASNet do [Silent-Face-Anti-Spoofing](https://github.com/minivision-ai/Silent-Face-Anti-Spoofing)
-(Apache 2.0), convertidos para ONNX em `src/checkpoint/assets/minifasnet` (ver `NOTICE` ali). O modelo de 68 pontos
+(Apache 2.0), convertidos para ONNX em `src/checkpoint/assets/minifasnet` (ver `NOTICE` ali),
+ReportLab e qrcode (BSD). O modelo de 68 pontos
 do dlib e os modelos do InsightFace **não** devem ser adicionados, pois proíbem uso comercial.

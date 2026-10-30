@@ -114,6 +114,10 @@ class PunchLog:
         ).fetchall()
         return [Punch(*row) for row in rows]
 
+    def get(self, nsr: int) -> Punch | None:
+        found = self._rows("WHERE nsr = ?", (nsr,))
+        return found[0] if found else None
+
     def last_for(self, employee_code: str) -> Punch | None:
         row = self._db.execute(
             f"SELECT {_COLUMNS} FROM punches WHERE employee_code = ? ORDER BY nsr DESC LIMIT 1",

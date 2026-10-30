@@ -63,6 +63,21 @@ class PunchConfig:
 
 
 @dataclass(frozen=True)
+class CompanyConfig:
+    name: str = "Empresa (protótipo)"
+    cnpj: str = ""
+    location: str = "Portaria"
+
+
+@dataclass(frozen=True)
+class ReceiptConfig:
+    enabled: bool = True
+    port: int = 8080
+    host: str = ""  # vazio = IP do computador na rede local, detectado automaticamente
+    qr_seconds: float = 10.0
+
+
+@dataclass(frozen=True)
 class LoggingConfig:
     level: str = "INFO"
     dir: Path = Path("logs")
@@ -76,6 +91,8 @@ class Config:
     recognition: RecognitionConfig = field(default_factory=RecognitionConfig)
     liveness: LivenessConfig = field(default_factory=LivenessConfig)
     punch: PunchConfig = field(default_factory=PunchConfig)
+    company: CompanyConfig = field(default_factory=CompanyConfig)
+    receipt: ReceiptConfig = field(default_factory=ReceiptConfig)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
 
 
@@ -129,6 +146,10 @@ def _validate(config: Config) -> None:
         raise ConfigError("[punch] intervalos não podem ser negativos")
     if punch.pin_max_attempts < 1:
         raise ConfigError("[punch] pin_max_attempts deve ser pelo menos 1")
+    if not 1 <= config.receipt.port <= 65535:
+        raise ConfigError("[receipt] port deve estar entre 1 e 65535")
+    if config.receipt.qr_seconds < 0:
+        raise ConfigError("[receipt] qr_seconds não pode ser negativo")
     if config.logging.level.upper() not in {"DEBUG", "INFO", "WARNING", "ERROR"}:
         raise ConfigError("[logging] level deve ser DEBUG, INFO, WARNING ou ERROR")
 

@@ -358,9 +358,11 @@ def cmd_totem(args: argparse.Namespace) -> int:
         if not report.ok:
             log.warning("integridade das marcações com problemas; rode: python -m checkpoint "
                         "verificar")
+        server, url_for = _start_receipts(cfg)
         print("Totem ativo. Pressione Q na janela para encerrar.")
         try:
-            run_totem(cfg, engine, sensor, antispoof, storage, camera_frames(cfg))
+            run_totem(cfg, engine, sensor, antispoof, storage, camera_frames(cfg),
+                      receipt_url_for=url_for)
         except CameraError as exc:
             log.error("%s", exc)
             return 1
@@ -368,9 +370,61 @@ def cmd_totem(args: argparse.Namespace) -> int:
             pass
         finally:
             sensor.close()
+            if server is not None:
+                server.shutdown()
             import cv2
 
             cv2.destroyAllWindows()
+    return 0
+
+
+def _receipt_site(cfg):
+    from checkpoint.receipt import load_secret, local_ip
+    from checkpoint.webserver import ReceiptSite
+
+    host = cfg.receipt.host or local_ip()
+    return ReceiptSite(
+        database_url=cfg.storage.database_url,
+        secret=load_secret(cfg.storage.data_dir),
+        company=cfg.company.name,
+        cnpj=cfg.company.cnpj,
+        location=cfg.company.location,
+        base_url=f"http://{host}:{cfg.receipt.port}",
+    )
+
+
+def _start_receipts(cfg):
+    """Sobe o servidor de comprovantes; sem ele o totem funciona, só não mostra o QR."""
+    if not cfg.receipt.enabled:
+        return None, None
+    from checkpoint.receipt import receipt_url
+    from checkpoint.webserver import start_server
+
+    site = _receipt_site(cfg)
+    try:
+        server = start_server(site, cfg.receipt.port)
+    except OSError as exc:
+        log.warning("comprovantes desligados: porta %s indisponível (%s)", cfg.receipt.port, exc)
+        return None, None
+    print(f"Comprovantes em {site.base_url} (o celular precisa estar na mesma rede)")
+    return server, lambda punch: receipt_url(site.base_url, site.secret, punch)
+
+
+def cmd_receipt(args: argparse.Namespace) -> int:
+    from checkpoint.receipt import receipt_url
+    from checkpoint.storage import Storage
+
+    cfg = args.config
+    with Storage.from_url(cfg.storage.database_url) as storage:
+        punch = storage.punches.get(args.nsr)
+    if punch is None:
+        log.error("NSR %s não encontrado", args.nsr)
+        return 1
+    site = _receipt_site(cfg)
+    out = args.saida or Path(f"comprovante-nsr-{punch.nsr}.pdf")
+    out.write_bytes(site.pdf(punch))
+    print(f"PDF salvo em {out}")
+    print(f"Link (com o totem aberto): {receipt_url(site.base_url, site.secret, punch)}")
     return 0
 
 
@@ -493,6 +547,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("verificar", help="confere a integridade das marcações").set_defaults(
         func=cmd_verify)
+
+    receipt = sub.add_parser("comprovante", help="gera o PDF do comprovante de uma marcação")
+    receipt.add_argument("nsr", type=int)
+    receipt.add_argument("--saida", type=Path, help="arquivo PDF (padrão: comprovante-nsr-N.pdf)")
+    receipt.set_defaults(func=cmd_receipt)
 
     sub.add_parser("vivacidade",
                    help="mostra ao vivo os sinais da prova de vida, para calibrar").set_defaults(
