@@ -90,18 +90,33 @@ def cmd_enroll(args: argparse.Namespace) -> int:
     cfg = args.config
     engine, storage = _engine_and_storage(cfg)
     with storage:
-        if any(e.code == args.matricula for e in storage.list_employees()):
-            log.error("matrícula %s já cadastrada", args.matricula)
+        existing = storage.find_employee(args.matricula)
+        if existing and not args.adicionar:
+            log.error("matrícula %s já cadastrada (use --adicionar para incluir amostras)",
+                      args.matricula)
             return 1
-        print(f"Cadastrando {args.nome}. Olhe para a câmera e mexa levemente a cabeça.")
+        if args.adicionar and not existing:
+            log.error("matrícula %s não encontrada", args.matricula)
+            return 1
+        name = existing.name if existing else args.nome
+        if not name:
+            log.error("informe o nome do funcionário")
+            return 1
+
+        print(f"Cadastrando {name}. Olhe para a câmera e mexa levemente a cabeça.")
         try:
             samples = enroll(cfg, engine, storage.load_gallery(), camera_frames(cfg),
-                             preview=not args.sem_preview)
-            storage.add_employee(args.matricula, args.nome, samples)
+                             preview=not args.sem_preview,
+                             same_employee_id=existing.id if existing else None)
+            if existing:
+                total = storage.add_samples(args.matricula, samples)
+            else:
+                storage.add_employee(args.matricula, name, samples)
+                total = len(samples)
         except (EnrollError, CameraError, StorageError) as exc:
             log.error("%s", exc)
             return 1
-    print(f"{args.nome} cadastrado com {len(samples)} amostras.")
+    print(f"{name} cadastrado com {total} amostras.")
     return 0
 
 
@@ -225,7 +240,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     enroll = sub.add_parser("cadastrar", help="cadastra o rosto de um funcionário")
     enroll.add_argument("matricula", help="matrícula ou código do funcionário")
-    enroll.add_argument("nome", help="nome do funcionário (entre aspas se tiver espaços)")
+    enroll.add_argument("nome", nargs="?",
+                        help="nome do funcionário (entre aspas se tiver espaços)")
+    enroll.add_argument("--adicionar", action="store_true",
+                        help="acrescenta amostras a quem já está cadastrado (ex.: outra luz)")
     enroll.add_argument("--sem-preview", action="store_true", help="não abre a janela de vídeo")
     enroll.set_defaults(func=cmd_enroll)
 

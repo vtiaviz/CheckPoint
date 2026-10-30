@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import statistics
 import time
+from collections import Counter, deque
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 
@@ -27,6 +28,10 @@ WINDOW = "CheckPoint (Q para sair)"
 # Intervalo entre amostras no cadastro, para variar levemente pose e expressão.
 SAMPLE_INTERVAL_S = 0.4
 ENROLL_TIMEOUT_S = 45.0
+
+# Decisão por votação nos últimos frames: um frame borrado ou de perfil não troca o resultado.
+VOTE_WINDOW = 5
+VOTES_NEEDED = 3
 
 
 class EnrollError(RuntimeError):
@@ -85,10 +90,12 @@ def enroll(
     frames: Iterator[np.ndarray],
     preview: bool = True,
     clock: Callable[[], float] = time.monotonic,
+    same_employee_id: int | None = None,
 ) -> list[np.ndarray]:
     """Captura as amostras de um funcionário novo.
 
     Recusa se as amostras não parecerem da mesma pessoa ou se o rosto já estiver cadastrado.
+    Com same_employee_id (amostras extras de quem já existe), o rosto precisa ser dele.
     """
     try:
         samples = _collect_samples(cfg, engine, frames, preview, clock)
@@ -98,7 +105,12 @@ def enroll(
 
     threshold = cfg.recognition.match_threshold
     duplicate = gallery.identify(normalize(np.mean(samples, axis=0)), threshold)
-    if duplicate is not None:
+    if same_employee_id is not None:
+        if duplicate is not None and duplicate.employee_id != same_employee_id:
+            raise EnrollError(
+                f"este rosto parece ser de {duplicate.name} (similaridade {duplicate.score:.2f})"
+            )
+    elif duplicate is not None:
         raise EnrollError(
             f"este rosto já está cadastrado como {duplicate.name} "
             f"(similaridade {duplicate.score:.2f})"
@@ -154,13 +166,16 @@ def recognize(
     preview: bool = True,
     on_change: Callable[[Match | None, Match | None], None] | None = None,
 ) -> None:
-    """Identifica quem está diante da câmera, quadro a quadro, até o usuário sair.
+    """Identifica quem está diante da câmera até o usuário sair.
 
-    on_change recebe o funcionário reconhecido (ou None) e o candidato mais parecido, mesmo
-    abaixo do limiar, para ajudar a calibrar o match_threshold.
+    O resultado só muda quando a mesma decisão aparece em VOTES_NEEDED dos últimos
+    VOTE_WINDOW frames com rosto. on_change recebe o funcionário reconhecido (ou None) e o
+    candidato mais parecido, mesmo abaixo do limiar, para ajudar a calibrar o match_threshold.
     """
     rec = cfg.recognition
     current: object = object()  # sentinela: força o primeiro aviso
+    votes: deque[int | None] = deque(maxlen=VOTE_WINDOW)
+    last_match: dict[int, Match] = {}
     for frame in frames:
         face, problem = check_face(engine.detect(frame), rec.min_face_size)
         match = best = None
@@ -170,12 +185,18 @@ def recognize(
             if best is not None and best.score >= rec.match_threshold:
                 match = best
 
-        if face is not None and problem is None:
+        if face is None:
+            votes.clear()  # pessoa saiu: a próxima começa do zero
+        elif problem is None:
             key = match.employee_id if match else None
-            if key != current:
-                current = key
+            if match:
+                last_match[key] = match
+            votes.append(key)
+            winner, count = Counter(votes).most_common(1)[0]
+            if count >= VOTES_NEEDED and winner != current:
+                current = winner
                 if on_change:
-                    on_change(match, best)
+                    on_change(last_match[winner] if winner is not None else None, best)
 
         if preview:
             if problem:

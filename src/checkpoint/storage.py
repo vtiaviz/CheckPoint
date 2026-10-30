@@ -95,6 +95,23 @@ class Storage:
             raise StorageError(f"matrícula {code} já cadastrada") from exc
         return employee_id
 
+    def find_employee(self, code: str) -> Employee | None:
+        return next((e for e in self.list_employees() if e.code == code), None)
+
+    def add_samples(self, code: str, embeddings: list[np.ndarray]) -> int:
+        """Acrescenta amostras a um funcionário existente; devolve o total de amostras."""
+        employee = self.find_employee(code)
+        if employee is None:
+            raise StorageError(f"matrícula {code} não encontrada")
+        if not embeddings:
+            raise StorageError("nenhuma amostra para acrescentar")
+        with self._db:
+            self._db.executemany(
+                "INSERT INTO face_samples (employee_id, embedding, created_at) VALUES (?, ?, ?)",
+                [(employee.id, _to_blob(e), _now()) for e in embeddings],
+            )
+        return employee.samples + len(embeddings)
+
     def remove_employee(self, code: str) -> bool:
         """Remove o funcionário e todos os seus vetores faciais (LGPD: desligamento)."""
         with self._db:

@@ -33,6 +33,7 @@ python -m checkpoint camera --preview    # idem, mostrando a imagem (Q para sair
 python -m checkpoint modelos             # baixa os modelos YuNet e SFace (~39 MB, uma vez só)
 
 python -m checkpoint cadastrar 001 "Maria Silva"   # captura 7 amostras do rosto
+python -m checkpoint cadastrar 001 --adicionar        # mais amostras (ex.: outra iluminação)
 python -m checkpoint listar
 python -m checkpoint reconhecer          # identificação ao vivo (Q para sair)
 python -m checkpoint remover 001         # apaga o funcionário e seus vetores faciais

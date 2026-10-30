@@ -53,3 +53,11 @@ def test_sqlite_url():
         "data/checkpoint.db")
     with pytest.raises(StorageError, match="SQLite"):
         sqlite_path("postgresql://localhost/checkpoint")
+
+
+def test_add_samples_to_existing_employee(storage):
+    storage.add_employee("001", "Ana", [emb(1)])
+    assert storage.add_samples("001", [emb(2), emb(3)]) == 3
+    assert storage.find_employee("001").samples == 3
+    with pytest.raises(StorageError, match="não encontrada"):
+        storage.add_samples("999", [emb(4)])

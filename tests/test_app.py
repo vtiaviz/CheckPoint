@@ -89,7 +89,7 @@ def test_recognize_reports_only_changes():
     gallery = Gallery()
     gallery.add(1, "Ana", [person(7)])
     seen = []
-    frames = [frame(7), frame(7), frame(NOBODY), frame(9), frame(9), frame(7)]
+    frames = [frame(7)] * 3 + [frame(NOBODY)] + [frame(9)] * 3 + [frame(7)] * 3
     recognize(Config(), FakeEngine(), gallery, iter(frames), preview=False,
               on_change=lambda m, best: seen.append((m and m.name, best.name)))
     # Desconhecido ainda informa o candidato mais parecido, para calibrar o limiar.
@@ -103,3 +103,25 @@ def test_benchmark_counts_frames():
     result = benchmark(FakeEngine(), gallery, frames, 10)
     assert (result.frames, result.frames_with_face) == (10, 5)
     assert "Total por frame" in result.report()
+
+
+def test_recognize_ignores_isolated_frames():
+    gallery = Gallery()
+    gallery.add(1, "Ana", [person(7)])
+    seen = []
+    # Um frame "desconhecido" no meio de vários da Ana não muda a decisão.
+    frames = [frame(7)] * 4 + [frame(9)] + [frame(7)] * 3
+    recognize(Config(), FakeEngine(), gallery, iter(frames), preview=False,
+              on_change=lambda m, best: seen.append(m and m.name))
+    assert seen == ["Ana"]
+
+
+def test_enroll_extra_samples_for_same_employee():
+    gallery = Gallery()
+    gallery.add(1, "Ana", [person(7)])
+    samples = enroll(Config(), FakeEngine(), gallery, iter([frame(7)] * 20), preview=False,
+                     clock=Clock(), same_employee_id=1)
+    assert len(samples) == Config().recognition.enroll_samples
+    with pytest.raises(EnrollError, match="Ana"):
+        enroll(Config(), FakeEngine(), gallery, iter([frame(7)] * 20), preview=False,
+               clock=Clock(), same_employee_id=2)
