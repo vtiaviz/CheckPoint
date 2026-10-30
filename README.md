@@ -30,7 +30,19 @@ copy config.example.toml config.toml   # Linux: cp config.example.toml config.to
 python -m checkpoint                     # versão, ambiente e configuração
 python -m checkpoint camera              # testa a webcam: resolução, FPS e iluminação
 python -m checkpoint camera --preview    # idem, mostrando a imagem (Q para sair)
+python -m checkpoint modelos             # baixa os modelos YuNet e SFace (~39 MB, uma vez só)
+
+python -m checkpoint cadastrar 001 "Maria Silva"   # captura 7 amostras do rosto
+python -m checkpoint listar
+python -m checkpoint reconhecer          # identificação ao vivo (Q para sair)
+python -m checkpoint remover 001         # apaga o funcionário e seus vetores faciais
+
+python -m checkpoint benchmark           # tempo de cada etapa, com galeria de 50 pessoas
 ```
+
+No cadastro, olhe para a câmera e mexa levemente a cabeça; o sistema recusa se aparecer mais de
+uma pessoa, se as amostras forem de pessoas diferentes ou se o rosto já estiver cadastrado.
+O limiar de reconhecimento (`match_threshold`) fica no `config.toml`.
 
 O teste da câmera avisa quando a imagem está escura ou o FPS está baixo. Iluminação frontal
 no ponto de captura importa mais que a resolução da webcam.

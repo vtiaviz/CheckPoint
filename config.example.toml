@@ -14,10 +14,20 @@ data_dir = "data"
 # SQLite no protótipo (um ponto de coleta). Para PostgreSQL, troque a URL.
 database_url = "sqlite:///data/checkpoint.db"
 
+[models]
+# Pasta dos modelos ONNX (YuNet e SFace). São baixados automaticamente na primeira execução.
+dir = "models"
+
 [recognition]
-# Limiar de similaridade de cosseno do SFace. O valor de referência do OpenCV Zoo é 0.363;
-# será calibrado no M1 com fotos reais.
+# Limiar de similaridade de cosseno do SFace (0 a 1). O valor de referência do OpenCV Zoo é
+# 0.363. Subir reduz falsos aceites; descer reduz recusas de quem está cadastrado.
 match_threshold = 0.363
+# Confiança mínima do detector YuNet para considerar que há um rosto.
+detect_score = 0.8
+# Menor lado do rosto, em pixels, para aceitar a captura (rosto pequeno = longe demais).
+min_face_size = 80
+# Amostras capturadas no cadastro de cada funcionário.
+enroll_samples = 7
 
 [logging]
 level = "INFO"
