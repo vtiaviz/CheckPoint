@@ -66,7 +66,14 @@ Depois de cada batida, o totem mostra um QR code por 10 segundos. Lido pelo celu
 rede**, ele abre o comprovante (página e PDF) servido pelo próprio totem na porta 8080. O link
 leva um token secreto, então não dá para abrir o comprovante de outra pessoa trocando o número.
 No Windows, na primeira vez, o Firewall pergunta se o Python pode aceitar conexões: libere em
-**redes privadas**. Dados da empresa em `[company]` e ajustes em `[receipt]`.
+**redes privadas**. Para testar, abra `http://IP-DO-TOTEM:8080/` no celular: deve aparecer
+"servidor de comprovantes no ar". Se não abrir, libere a porta no PowerShell como administrador:
+
+```powershell
+New-NetFirewallRule -DisplayName "CheckPoint 8080" -Direction Inbound -Protocol TCP -LocalPort 8080 -Action Allow -Profile Private,Public
+```
+
+Dados da empresa em `[company]` e ajustes em `[receipt]`.
 
 No cadastro, olhe para a câmera e mexa levemente a cabeça; o sistema recusa se aparecer mais de
 uma pessoa, se as amostras forem de pessoas diferentes ou se o rosto já estiver cadastrado.
