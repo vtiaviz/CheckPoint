@@ -342,6 +342,98 @@ def cmd_liveness_diag(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_totem(args: argparse.Namespace) -> int:
+    from checkpoint.app import camera_frames
+    from checkpoint.camera import CameraError
+    from checkpoint.totem import run_totem
+
+    cfg = args.config
+    engine, storage = _engine_and_storage(cfg)
+    sensor, antispoof = _liveness_parts(cfg)
+    with storage:
+        if not storage.list_employees():
+            log.error("nenhum funcionário cadastrado; use o comando cadastrar")
+            return 1
+        report = storage.punches.verify()
+        if not report.ok:
+            log.warning("integridade das marcações com problemas; rode: python -m checkpoint "
+                        "verificar")
+        print("Totem ativo. Pressione Q na janela para encerrar.")
+        try:
+            run_totem(cfg, engine, sensor, antispoof, storage, camera_frames(cfg))
+        except CameraError as exc:
+            log.error("%s", exc)
+            return 1
+        except KeyboardInterrupt:
+            pass
+        finally:
+            sensor.close()
+            import cv2
+
+            cv2.destroyAllWindows()
+    return 0
+
+
+def cmd_pin(args: argparse.Namespace) -> int:
+    import getpass
+
+    from checkpoint.storage import Storage, StorageError
+
+    with Storage.from_url(args.config.storage.database_url) as storage:
+        employee = storage.find_employee(args.matricula)
+        if employee is None:
+            log.error("matrícula %s não encontrada", args.matricula)
+            return 1
+        pin = getpass.getpass(f"Novo PIN para {employee.name} (4 a 8 dígitos): ")
+        if pin != getpass.getpass("Repita o PIN: "):
+            log.error("os PINs não conferem")
+            return 1
+        try:
+            storage.set_pin(args.matricula, pin)
+        except StorageError as exc:
+            log.error("%s", exc)
+            return 1
+    print(f"PIN de {employee.name} definido.")
+    return 0
+
+
+def cmd_punches(args: argparse.Namespace) -> int:
+    from datetime import date
+
+    from checkpoint.storage import Storage
+
+    day = None
+    if not args.todas:
+        try:
+            day = date.fromisoformat(args.data) if args.data else date.today()
+        except ValueError:
+            log.error("data inválida: %s (use AAAA-MM-DD)", args.data)
+            return 1
+    with Storage.from_url(args.config.storage.database_url) as storage:
+        punches = storage.punches.list(day=day, employee_code=args.matricula)
+    if not punches:
+        print("Nenhuma marcação encontrada.")
+    for p in punches:
+        method = "PIN" if p.method == "pin" else "face"
+        print(f"NSR {p.nsr:>6} | {p.local_date} {p.time_text} | {p.kind_text:<7} | "
+              f"{p.employee_code:>8} {p.employee_name} | {method}")
+    return 0
+
+
+def cmd_verify(args: argparse.Namespace) -> int:
+    from checkpoint.storage import Storage
+
+    with Storage.from_url(args.config.storage.database_url) as storage:
+        report = storage.punches.verify()
+    if report.ok:
+        print(f"OK: {report.total} marcações íntegras, NSR sequencial e cadeia de hash válida.")
+        return 0
+    print(f"FALHA: {len(report.problems)} problema(s) em {report.total} marcações:")
+    for problem in report.problems:
+        print(f"  - {problem}")
+    return 1
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="checkpoint", description=__doc__)
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
@@ -381,10 +473,26 @@ def build_parser() -> argparse.ArgumentParser:
                            help="não abre a janela; só imprime no terminal")
     recognize.set_defaults(func=cmd_recognize)
 
-    punch = sub.add_parser("ponto", help="simula a batida: reconhecimento + prova de vida")
+    punch = sub.add_parser("ponto", help="simula a batida sem registrar (teste)")
     punch.add_argument("--sem-preview", action="store_true",
                        help="não abre a janela (o desafio não aparece na tela)")
     punch.set_defaults(func=cmd_punch)
+
+    sub.add_parser("totem", help="modo totem: reconhece, confirma e registra o ponto").set_defaults(
+        func=cmd_totem)
+
+    pin = sub.add_parser("pin", help="define o PIN do funcionário (alternativa à biometria)")
+    pin.add_argument("matricula")
+    pin.set_defaults(func=cmd_pin)
+
+    punches = sub.add_parser("marcacoes", help="lista as marcações (padrão: hoje)")
+    punches.add_argument("--data", help="dia no formato AAAA-MM-DD")
+    punches.add_argument("--matricula", help="só deste funcionário")
+    punches.add_argument("--todas", action="store_true", help="todas as datas")
+    punches.set_defaults(func=cmd_punches)
+
+    sub.add_parser("verificar", help="confere a integridade das marcações").set_defaults(
+        func=cmd_verify)
 
     sub.add_parser("vivacidade",
                    help="mostra ao vivo os sinais da prova de vida, para calibrar").set_defaults(

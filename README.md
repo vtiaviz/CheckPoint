@@ -38,7 +38,12 @@ python -m checkpoint listar
 python -m checkpoint reconhecer          # identificação ao vivo (Q para sair)
 python -m checkpoint remover 001         # apaga o funcionário e seus vetores faciais
 
-python -m checkpoint ponto               # simula a batida: reconhecimento + prova de vida
+python -m checkpoint totem               # modo totem: reconhece, confirma e registra o ponto
+python -m checkpoint pin 001             # define o PIN (batida por matrícula + PIN, tecla M)
+python -m checkpoint marcacoes           # marcações de hoje (--data AAAA-MM-DD, --todas)
+python -m checkpoint verificar           # confere NSR e cadeia de hash das marcações
+
+python -m checkpoint ponto               # simula a batida sem registrar (teste)
 python -m checkpoint vivacidade          # sinais da prova de vida ao vivo, para calibrar
 
 python -m checkpoint benchmark           # tempo de cada etapa, com galeria de 50 pessoas
@@ -48,6 +53,13 @@ Na batida, depois de reconhecer a pessoa, o sistema sorteia um desafio (piscar o
 para um lado) e, em paralelo, um modelo anti-spoofing avalia se a imagem é de um rosto real ou de
 uma foto/tela. A imagem na tela é espelhada, então "esquerda" é o lado esquerdo da tela.
 Ajustes em `[liveness]` no `config.toml`.
+
+No totem, cada batida aprovada vira uma marcação com NSR sequencial e hash SHA-256 encadeado à
+anterior; a primeira do dia é entrada e as seguintes alternam saída/entrada. O banco recusa
+alterar ou apagar marcações, e `verificar` detecta qualquer adulteração feita por fora. Quem não
+pode usar a biometria aperta M e digita matrícula e PIN (a marcação fica identificada como
+"PIN"); três PINs errados bloqueiam a matrícula por 5 minutos. Batidas repetidas em menos de
+2 minutos são ignoradas. Ajustes em `[punch]`.
 
 No cadastro, olhe para a câmera e mexa levemente a cabeça; o sistema recusa se aparecer mais de
 uma pessoa, se as amostras forem de pessoas diferentes ou se o rosto já estiver cadastrado.

@@ -56,6 +56,13 @@ class LivenessConfig:
 
 
 @dataclass(frozen=True)
+class PunchConfig:
+    min_interval_min: float = 2.0
+    pin_max_attempts: int = 3
+    pin_lockout_min: float = 5.0
+
+
+@dataclass(frozen=True)
 class LoggingConfig:
     level: str = "INFO"
     dir: Path = Path("logs")
@@ -68,6 +75,7 @@ class Config:
     models: ModelsConfig = field(default_factory=ModelsConfig)
     recognition: RecognitionConfig = field(default_factory=RecognitionConfig)
     liveness: LivenessConfig = field(default_factory=LivenessConfig)
+    punch: PunchConfig = field(default_factory=PunchConfig)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
 
 
@@ -116,6 +124,11 @@ def _validate(config: Config) -> None:
         raise ConfigError("[liveness] real_threshold deve estar entre 0 e 1")
     if live.min_passive_frames < 1:
         raise ConfigError("[liveness] min_passive_frames deve ser pelo menos 1")
+    punch = config.punch
+    if punch.min_interval_min < 0 or punch.pin_lockout_min < 0:
+        raise ConfigError("[punch] intervalos não podem ser negativos")
+    if punch.pin_max_attempts < 1:
+        raise ConfigError("[punch] pin_max_attempts deve ser pelo menos 1")
     if config.logging.level.upper() not in {"DEBUG", "INFO", "WARNING", "ERROR"}:
         raise ConfigError("[logging] level deve ser DEBUG, INFO, WARNING ou ERROR")
 
