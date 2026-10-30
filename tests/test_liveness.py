@@ -35,8 +35,17 @@ def test_blink_needs_open_closed_open():
     assert run(Challenge.BLINK, [OPEN, CLOSED]).status is Status.PENDING
 
 
+def test_blink_relative_to_persons_open_level():
+    # Olho aberto já marcando ~0,2 (como na C270): piscada leve até 0,45 conta.
+    seq = [Signals(b, 0) for b in (0.25, 0.18, 0.22, 0.45, 0.24)]
+    assert run(Challenge.BLINK, seq).status is Status.PASSED
+    # Foto: valores estáveis e baixos (0,05 a 0,12) nunca passam.
+    photo = [Signals(b, 0) for b in (0.05, 0.08, 0.12, 0.06, 0.10, 0.09)]
+    assert run(Challenge.BLINK, photo).status is Status.PENDING
+
+
 def test_turn_needs_frontal_first_and_right_side():
-    left = [Signals(0, 0), Signals(0, 12), Signals(0, 25)]
+    left = [Signals(0, 0), Signals(0, 12), Signals(0, 18)]
     assert run(Challenge.TURN_LEFT, left).status is Status.PASSED
     # Já começa virado: não conta.
     assert run(Challenge.TURN_LEFT, [Signals(0, 30)]).status is Status.PENDING

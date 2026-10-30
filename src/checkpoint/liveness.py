@@ -7,9 +7,12 @@ celular, inclusive um vídeo da pessoa fazendo o gesto pedido.
 
 from __future__ import annotations
 
+import contextlib
 import enum
 import math
+import os
 import random
+import sys
 from dataclasses import dataclass, field
 from importlib import resources
 from pathlib import Path
@@ -19,11 +22,14 @@ import numpy as np
 
 from checkpoint.face import Face
 
-# Sinais do Face Landmarker (blendshapes vão de 0 a 1).
-EYES_OPEN = 0.30
-EYES_CLOSED = 0.55
+# Sinais do Face Landmarker (blendshapes vão de 0 a 1). O nível de "olho aberto" varia de
+# pessoa para pessoa (na C270 foi de 0,16 a 0,48), então a piscada é medida em relação a ele.
+EYES_OPEN_MAX = 0.50  # acima disso não serve como referência de olho aberto
+BLINK_RISE = 0.20  # quanto a piscada precisa subir acima da referência
+BLINK_MIN = 0.35  # valor mínimo absoluto para contar como olho fechado
+BLINK_REOPEN = 0.10  # reabriu: voltou para perto da referência
 FRONTAL_YAW = 10.0  # graus
-TURN_YAW = 20.0  # graus
+TURN_YAW = 15.0  # graus
 
 
 @dataclass(frozen=True)
@@ -41,6 +47,29 @@ def yaw_from_matrix(matrix: np.ndarray) -> float:
     return math.degrees(math.atan2(float(matrix[0, 2]), float(matrix[2, 2])))
 
 
+@contextlib.contextmanager
+def _quiet_stderr():
+    """Silencia o stderr do processo (nível de descritor de arquivo).
+
+    O MediaPipe escreve avisos internos de C++ direto no stderr ao carregar o modelo; eles não
+    passam pelo logging do Python e poluem o terminal do totem.
+    """
+    try:
+        fd = sys.stderr.fileno()
+    except (AttributeError, OSError, ValueError):  # stderr substituído (ex.: pytest)
+        yield
+        return
+    sys.stderr.flush()
+    saved = os.dup(fd)
+    try:
+        with open(os.devnull, "w") as devnull:
+            os.dup2(devnull.fileno(), fd)
+            yield
+    finally:
+        os.dup2(saved, fd)
+        os.close(saved)
+
+
 class LandmarkSensor:
     """Extrai piscada e rotação da cabeça de cada frame com o MediaPipe Face Landmarker."""
 
@@ -54,8 +83,10 @@ class LandmarkSensor:
             output_face_blendshapes=True,
             output_facial_transformation_matrixes=True,
         )
-        self._landmarker = vision.FaceLandmarker.create_from_options(options)
+        with _quiet_stderr():
+            self._landmarker = vision.FaceLandmarker.create_from_options(options)
         self._last_ts = -1
+        self._warmed_up = False
 
     def close(self) -> None:
         self._landmarker.close()
@@ -67,9 +98,13 @@ class LandmarkSensor:
         timestamp_ms = max(timestamp_ms, self._last_ts + 1)
         self._last_ts = timestamp_ms
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        result = self._landmarker.detect_for_video(
-            mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb), timestamp_ms
-        )
+        image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
+        if self._warmed_up:
+            result = self._landmarker.detect_for_video(image, timestamp_ms)
+        else:  # a primeira inferência também imprime avisos internos
+            with _quiet_stderr():
+                result = self._landmarker.detect_for_video(image, timestamp_ms)
+            self._warmed_up = True
         if not result.face_blendshapes or not result.facial_transformation_matrixes:
             return None
         shapes = {c.category_name: c.score for c in result.face_blendshapes[0]}
@@ -112,6 +147,7 @@ class ChallengeTracker:
     status: Status = Status.PENDING
     reason: str = ""
     _stage: int = 0
+    _open_level: float = 1.0
 
     def update(self, signals: Signals) -> Status:
         if self.status is not Status.PENDING:
@@ -123,11 +159,12 @@ class ChallengeTracker:
         return self.status
 
     def _update_blink(self, s: Signals) -> None:
-        if self._stage == 0 and s.blink < EYES_OPEN:
+        if self._stage in (0, 1) and s.blink < EYES_OPEN_MAX:
+            self._open_level = min(self._open_level, s.blink)
             self._stage = 1
-        elif self._stage == 1 and s.blink > EYES_CLOSED:
+        if self._stage == 1 and s.blink >= max(BLINK_MIN, self._open_level + BLINK_RISE):
             self._stage = 2
-        elif self._stage == 2 and s.blink < EYES_OPEN:
+        elif self._stage == 2 and s.blink <= self._open_level + BLINK_REOPEN:
             self.status = Status.PASSED
 
     def _update_turn(self, s: Signals) -> None:
