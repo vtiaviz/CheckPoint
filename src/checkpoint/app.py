@@ -152,23 +152,30 @@ def recognize(
     gallery: Gallery,
     frames: Iterator[np.ndarray],
     preview: bool = True,
-    on_change: Callable[[Match | None], None] | None = None,
+    on_change: Callable[[Match | None, Match | None], None] | None = None,
 ) -> None:
-    """Identifica quem está diante da câmera, quadro a quadro, até o usuário sair."""
+    """Identifica quem está diante da câmera, quadro a quadro, até o usuário sair.
+
+    on_change recebe o funcionário reconhecido (ou None) e o candidato mais parecido, mesmo
+    abaixo do limiar, para ajudar a calibrar o match_threshold.
+    """
     rec = cfg.recognition
     current: object = object()  # sentinela: força o primeiro aviso
     for frame in frames:
         face, problem = check_face(engine.detect(frame), rec.min_face_size)
-        match = None
+        match = best = None
         if problem is None and face is not None:
-            match = gallery.identify(engine.embed(frame, face), rec.match_threshold)
+            ranked = gallery.scores(engine.embed(frame, face))
+            best = ranked[0] if ranked else None
+            if best is not None and best.score >= rec.match_threshold:
+                match = best
 
         if face is not None and problem is None:
             key = match.employee_id if match else None
             if key != current:
                 current = key
                 if on_change:
-                    on_change(match)
+                    on_change(match, best)
 
         if preview:
             if problem:
@@ -176,7 +183,8 @@ def recognize(
             elif match:
                 draw(frame, face, GREEN, f"{match.name} ({match.score:.2f})")
             else:
-                draw(frame, face, RED, "Nao reconhecido")
+                hint = f" (mais parecido: {best.score:.2f})" if best else ""
+                draw(frame, face, RED, f"Nao reconhecido{hint}")
             if not show(frame):
                 break
     if preview:

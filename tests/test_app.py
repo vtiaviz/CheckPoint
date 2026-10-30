@@ -91,8 +91,9 @@ def test_recognize_reports_only_changes():
     seen = []
     frames = [frame(7), frame(7), frame(NOBODY), frame(9), frame(9), frame(7)]
     recognize(Config(), FakeEngine(), gallery, iter(frames), preview=False,
-              on_change=lambda m: seen.append(m.name if m else None))
-    assert seen == ["Ana", None, "Ana"]
+              on_change=lambda m, best: seen.append((m and m.name, best.name)))
+    # Desconhecido ainda informa o candidato mais parecido, para calibrar o limiar.
+    assert seen == [("Ana", "Ana"), (None, "Ana"), ("Ana", "Ana")]
 
 
 def test_benchmark_counts_frames():

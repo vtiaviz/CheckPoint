@@ -141,9 +141,12 @@ def cmd_recognize(args: argparse.Namespace) -> int:
         log.error("nenhum funcionário cadastrado; use o comando cadastrar")
         return 1
 
-    def announce(match):
+    def announce(match, best):
         if match:
             print(f"Reconhecido: {match.name} (similaridade {match.score:.2f})")
+        elif best:
+            print(f"Rosto não reconhecido (mais parecido: {best.name}, "
+                  f"similaridade {best.score:.2f}, limiar {cfg.recognition.match_threshold})")
         else:
             print("Rosto não reconhecido")
 
