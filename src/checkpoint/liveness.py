@@ -38,6 +38,13 @@ class Signals:
     yaw: float  # graus; positivo = rosto virado para a esquerda da própria pessoa
 
 
+def describe_yaw(yaw: float) -> str:
+    """Lado para onde a pessoa virou o rosto, do ponto de vista dela."""
+    if abs(yaw) < FRONTAL_YAW:
+        return "de frente"
+    return "esquerda" if yaw > 0 else "direita"
+
+
 def yaw_from_matrix(matrix: np.ndarray) -> float:
     """Ângulo horizontal da cabeça a partir da matriz de transformação facial do MediaPipe.
 
@@ -140,12 +147,14 @@ class ChallengeTracker:
 
     Piscar: olhos abertos, depois fechados, depois abertos de novo.
     Virar: rosto de frente primeiro, depois virado para o lado pedido. Virar para o lado
-    errado reprova, para que um vídeo com vários gestos não passe por tentativa e erro.
+    errado não reprova (na prática as pessoas confundem o lado), só mostra um aviso; quem
+    barra vídeo com vários gestos é o anti-spoofing passivo.
     """
 
     challenge: Challenge
     status: Status = Status.PENDING
     reason: str = ""
+    hint: str = ""
     _stage: int = 0
     _open_level: float = 1.0
 
@@ -176,8 +185,7 @@ class ChallengeTracker:
         if s.yaw * wanted > TURN_YAW:
             self.status = Status.PASSED
         elif s.yaw * wanted < -TURN_YAW:
-            self.status = Status.FAILED
-            self.reason = "virou para o lado errado"
+            self.hint = "Para o OUTRO lado"
 
     def fail(self, reason: str) -> None:
         self.status = Status.FAILED

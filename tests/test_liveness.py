@@ -14,6 +14,7 @@ from checkpoint.liveness import (
     Signals,
     Status,
     crop_box,
+    describe_yaw,
     pick_challenges,
     yaw_from_matrix,
 )
@@ -49,8 +50,10 @@ def test_turn_needs_frontal_first_and_right_side():
     assert run(Challenge.TURN_LEFT, left).status is Status.PASSED
     # Já começa virado: não conta.
     assert run(Challenge.TURN_LEFT, [Signals(0, 30)]).status is Status.PENDING
+    # Lado errado só avisa; ainda dá tempo de virar para o lado certo.
     wrong = run(Challenge.TURN_RIGHT, left)
-    assert wrong.status is Status.FAILED and "errado" in wrong.reason
+    assert wrong.status is Status.PENDING and "OUTRO" in wrong.hint
+    assert run(Challenge.TURN_RIGHT, [*left, Signals(0, -18)]).status is Status.PASSED
     assert run(Challenge.TURN_RIGHT, [Signals(0, 0), Signals(0, -25)]).status is Status.PASSED
 
 
@@ -61,6 +64,12 @@ def test_pick_challenges_never_asks_both_sides():
         assert len(two) == 2 and Challenge.BLINK in two
         assert len(pick_challenges(1, rng)) == 1
     assert {pick_challenges(1, random.Random(i))[0] for i in range(30)} == set(Challenge)
+
+
+def test_describe_yaw():
+    assert describe_yaw(25) == "esquerda"
+    assert describe_yaw(-25) == "direita"
+    assert describe_yaw(3) == "de frente"
 
 
 def test_yaw_sign_and_magnitude():

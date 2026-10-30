@@ -298,6 +298,7 @@ def cmd_liveness_diag(args: argparse.Namespace) -> int:
 
     from checkpoint.app import GREEN, RED, YELLOW, camera_frames, check_face, show_mirrored
     from checkpoint.camera import CameraError
+    from checkpoint.liveness import describe_yaw
 
     cfg = args.config
     from checkpoint.app import build_engine
@@ -319,8 +320,8 @@ def cmd_liveness_diag(args: argparse.Namespace) -> int:
             signals = sensor.measure(frame, int(now * 1000))
             real = antispoof.score(frame, face)
             blink = f"{signals.blink:.2f}" if signals else "-"
-            yaw = f"{signals.yaw:+.0f}" if signals else "-"
-            line = f"rosto real {real:.2f} | piscada {blink} | giro {yaw} graus"
+            yaw = f"{signals.yaw:+.0f} graus ({describe_yaw(signals.yaw)})" if signals else "-"
+            line = f"rosto real {real:.2f} | piscada {blink} | giro {yaw}"
             if now - last_print >= 0.5:
                 print(line)
                 last_print = now

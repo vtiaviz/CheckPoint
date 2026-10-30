@@ -396,6 +396,8 @@ def verify_liveness(
         if preview:
             text = current.challenge.screen_text if current else "Olhe para a camera"
             detail = f"{employee.name} - {now - start:.1f}s"
+            if current is not None and current.hint:
+                detail = f"{current.hint} - {detail}"
             if not show_mirrored(frame, face, YELLOW if problem else GREEN, text, detail):
                 return result(False, "cancelado")
     return result(False, "a câmera parou")
