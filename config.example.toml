@@ -42,6 +42,13 @@ real_threshold = 0.6
 # Frames de frente necessários para o anti-spoofing decidir.
 min_passive_frames = 3
 
+[punch]
+# Intervalo mínimo, em minutos, entre duas batidas do mesmo funcionário (evita duplicadas).
+min_interval_min = 2.0
+# PINs errados seguidos antes de bloquear a matrícula, e por quantos minutos.
+pin_max_attempts = 3
+pin_lockout_min = 5.0
+
 [logging]
 level = "INFO"
 dir = "logs"

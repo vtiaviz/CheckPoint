@@ -6,6 +6,7 @@ import logging
 import random
 import statistics
 import time
+import unicodedata
 from collections import Counter, deque
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
@@ -67,19 +68,47 @@ def camera_frames(cfg: Config) -> Iterator[np.ndarray]:
         cap.release()
 
 
+def ascii_text(text: str) -> str:
+    """As fontes do OpenCV não têm acentos: "Saída, João" vira "Saida, Joao"."""
+    decomposed = unicodedata.normalize("NFKD", text)
+    return "".join(c for c in decomposed if not unicodedata.combining(c)).encode(
+        "ascii", "replace").decode()
+
+
 def draw(frame: np.ndarray, face: Face | None, color: tuple[int, int, int], text: str) -> None:
-    # As fontes do OpenCV não têm acentos: os textos da tela ficam sem acentuação.
     if face is not None:
         x, y, w, h = face.box
         cv2.rectangle(frame, (x, y), (x + w, y + h), color, 2)
     cv2.rectangle(frame, (0, 0), (frame.shape[1], 36), (0, 0, 0), -1)
-    cv2.putText(frame, text, (10, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
+    cv2.putText(frame, ascii_text(text), (10, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
+
+
+@dataclass
+class Screen:
+    """Estado compartilhado da janela: última tecla e elementos fixos do modo totem."""
+
+    last_key: int = -1
+    clock: bool = False  # relógio com segundos no canto (modo totem)
+    footer: str = ""
+
+
+SCREEN = Screen()
 
 
 def show(frame: np.ndarray) -> bool:
-    """Mostra o frame; devolve False se o usuário pediu para sair."""
+    """Mostra o frame; devolve False se o usuário pediu para sair (Q ou Esc)."""
+    if SCREEN.clock:
+        stamp = time.strftime("%d/%m/%Y %H:%M:%S")
+        width = frame.shape[1]
+        cv2.rectangle(frame, (width - 250, 0), (width, 36), (0, 0, 0), -1)
+        cv2.putText(frame, stamp, (width - 240, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.65,
+                    (255, 255, 255), 2)
+    if SCREEN.footer:
+        cv2.putText(frame, ascii_text(SCREEN.footer), (frame.shape[1] - 260,
+                    frame.shape[0] - 12), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
     cv2.imshow(WINDOW, frame)
-    return cv2.waitKey(1) & 0xFF not in (ord("q"), 27)
+    SCREEN.last_key = cv2.waitKey(1)
+    return SCREEN.last_key & 0xFF not in (ord("q"), 27)
 
 
 def check_face(faces: list[Face], min_size: int) -> tuple[Face | None, str | None]:
@@ -293,18 +322,22 @@ def show_mirrored(frame: np.ndarray, face: Face | None, color: tuple[int, int, i
         cv2.rectangle(view, (x, y), (x + w, y + h), color, 2)
     draw(view, None, color, text)
     if detail:
-        cv2.putText(view, detail, (10, view.shape[0] - 12), cv2.FONT_HERSHEY_SIMPLEX, 0.55,
-                    color, 1)
+        cv2.putText(view, ascii_text(detail), (10, view.shape[0] - 12),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.55, color, 1)
     return show(view)
+
+
+MANUAL = "manual"  # devolvido por wait_for_employee quando pedem matrícula + PIN
 
 
 def wait_for_employee(
     cfg: Config, engine: FaceEngine, gallery: Gallery, frames: Iterator[np.ndarray],
-    preview: bool = True,
-) -> Match | None:
+    preview: bool = True, allow_manual: bool = False,
+) -> Match | str | None:
     """Espera até alguém ser reconhecido de forma estável (votação entre frames).
 
-    Devolve None se a câmera parar ou o usuário sair.
+    Devolve None se a câmera parar ou o usuário sair, e MANUAL se, com allow_manual, a tecla
+    M for pressionada.
     """
     rec = cfg.recognition
     votes: deque[int | None] = deque(maxlen=VOTE_WINDOW)
@@ -326,6 +359,8 @@ def wait_for_employee(
             text = problem or ("Identificando..." if face is not None else "Aproxime-se")
             if not show_mirrored(frame, face, YELLOW, text):
                 return None
+            if allow_manual and SCREEN.last_key & 0xFF in (ord("m"), ord("M")):
+                return MANUAL
     return None
 
 
