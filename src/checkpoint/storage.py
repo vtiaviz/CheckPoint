@@ -33,6 +33,10 @@ CREATE TABLE IF NOT EXISTS face_samples (
     embedding    BLOB NOT NULL,
     created_at   TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS settings (
+    key    TEXT PRIMARY KEY,
+    value  TEXT NOT NULL
+);
 """
 
 
@@ -108,6 +112,43 @@ class Storage:
         except sqlite3.IntegrityError as exc:
             raise StorageError(f"matrícula {code} já cadastrada") from exc
         return employee_id
+
+    def add_employee_with_pin(self, code: str, name: str, pin: str) -> int:
+        """Cadastro sem biometria (só matrícula + PIN), para quem não usa o rosto (LGPD).
+
+        O rosto pode ser incluído depois com: cadastrar MATRICULA --adicionar
+        """
+        validate_pin(pin)
+        code, name = code.strip(), name.strip()
+        if not code or not name:
+            raise StorageError("matrícula e nome são obrigatórios")
+        try:
+            with self._db:
+                cur = self._db.execute(
+                    "INSERT INTO employees (code, name, created_at, pin_hash) VALUES (?, ?, ?, ?)",
+                    (code, name, _now(), hash_pin(pin)),
+                )
+        except sqlite3.IntegrityError as exc:
+            raise StorageError(f"matrícula {code} já cadastrada") from exc
+        return int(cur.lastrowid)
+
+    def clear_pin(self, code: str) -> bool:
+        with self._db:
+            cur = self._db.execute("UPDATE employees SET pin_hash = NULL WHERE code = ?",
+                                   (code,))
+        return cur.rowcount > 0
+
+    def get_setting(self, key: str) -> str | None:
+        row = self._db.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
+        return row[0] if row else None
+
+    def set_setting(self, key: str, value: str) -> None:
+        with self._db:
+            self._db.execute(
+                "INSERT INTO settings (key, value) VALUES (?, ?) "
+                "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                (key, value),
+            )
 
     def find_employee(self, code: str) -> Employee | None:
         return next((e for e in self.list_employees() if e.code == code), None)

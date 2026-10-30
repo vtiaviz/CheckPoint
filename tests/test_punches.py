@@ -103,3 +103,18 @@ def test_migrates_database_from_m1(tmp_path):
         assert s.find_employee("001").has_pin is False
         s.set_pin("001", "4321")
         assert s.check_pin("001", "4321") is not None
+
+
+def test_employee_with_pin_only_and_settings(storage):
+    storage.add_employee_with_pin("010", " Carla ", "4321")
+    carla = storage.find_employee("010")
+    assert carla.name == "Carla" and carla.samples == 0 and carla.has_pin
+    assert storage.check_pin("010", "4321") is not None
+    with pytest.raises(StorageError):
+        storage.add_employee_with_pin("010", "Outra", "1111")
+    assert storage.clear_pin("010") and not storage.find_employee("010").has_pin
+
+    assert storage.get_setting("x") is None
+    storage.set_setting("x", "1")
+    storage.set_setting("x", "2")
+    assert storage.get_setting("x") == "2"

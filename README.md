@@ -44,6 +44,9 @@ python -m checkpoint marcacoes           # marcações de hoje (--data AAAA-MM-D
 python -m checkpoint verificar           # confere NSR e cadeia de hash das marcações
 python -m checkpoint comprovante 1       # salva o PDF do comprovante da marcação NSR 1
 
+python -m checkpoint senha-painel        # define a senha do painel do RH
+python -m checkpoint painel              # painel web do RH na porta 8081
+
 python -m checkpoint ponto               # simula a batida sem registrar (teste)
 python -m checkpoint vivacidade          # sinais da prova de vida ao vivo, para calibrar
 
@@ -74,6 +77,36 @@ New-NetFirewallRule -DisplayName "CheckPoint 8080" -Direction Inbound -Protocol 
 ```
 
 Dados da empresa em `[company]` e ajustes em `[receipt]`.
+
+### Painel do RH
+
+O painel roda num terminal separado do totem e lê o mesmo banco. Na primeira vez, defina a
+senha (mínimo 8 caracteres) e depois suba o painel:
+
+```bash
+python -m checkpoint senha-painel
+python -m checkpoint painel
+```
+
+Abra o endereço mostrado (`http://IP-DO-TOTEM:8081`) num navegador da mesma rede. Lá o RH:
+
+- consulta as **marcações** por período e funcionário;
+- vê o **espelho de ponto** com as horas trabalhadas por dia e o total do período (dias com
+  entrada sem saída ficam marcados como "sem saída");
+- exporta os dois em **CSV** (abre direto no Excel, separado por ponto e vírgula);
+- cadastra funcionário **só com PIN** (sem biometria), define PIN e remove funcionários (o rosto
+  continua sendo cadastrado no totem, que tem a câmera);
+- confere a **integridade** da cadeia de marcações.
+
+Cinco senhas erradas seguidas bloqueiam o IP por 5 minutos e a sessão expira em 8 horas. Para
+liberar a porta no Firewall do Windows (PowerShell como administrador):
+
+```powershell
+New-NetFirewallRule -DisplayName "CheckPoint 8081" -Direction Inbound -Protocol TCP -LocalPort 8081 -Action Allow -Profile Private
+```
+
+Para deixar o painel acessível só no próprio computador, use `bind = "127.0.0.1"` em `[panel]`.
+O painel usa HTTP sem criptografia: use apenas na rede interna.
 
 No cadastro, olhe para a câmera e mexa levemente a cabeça; o sistema recusa se aparecer mais de
 uma pessoa, se as amostras forem de pessoas diferentes ou se o rosto já estiver cadastrado.
