@@ -12,4 +12,4 @@ dist/
 data/
 logs/
 config.toml
-models/*.onnx
+models/

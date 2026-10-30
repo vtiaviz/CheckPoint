@@ -220,6 +220,127 @@ def cmd_benchmark(args: argparse.Namespace) -> int:
     return 0
 
 
+def _liveness_parts(cfg):
+    from checkpoint.liveness import LandmarkSensor, PassiveAntiSpoof
+    from checkpoint.models import LANDMARKER, ensure_model
+
+    return LandmarkSensor(ensure_model(LANDMARKER, cfg.models.dir)), PassiveAntiSpoof()
+
+
+def cmd_punch(args: argparse.Namespace) -> int:
+    from checkpoint.app import (
+        GREEN,
+        RED,
+        camera_frames,
+        verify_liveness,
+        wait_for_employee,
+        wait_until_gone,
+    )
+    from checkpoint.camera import CameraError
+
+    cfg = args.config
+    preview = not args.sem_preview
+    engine, storage = _engine_and_storage(cfg)
+    with storage:
+        gallery = storage.load_gallery()
+    if not len(gallery):
+        log.error("nenhum funcionário cadastrado; use o comando cadastrar")
+        return 1
+    sensor, antispoof = _liveness_parts(cfg)
+    print("Simulação de batida (nada é registrado ainda). Pressione Q na janela para sair.")
+    if not cfg.liveness.enabled:
+        print("AVISO: prova de vida desligada em [liveness] enabled.")
+
+    try:
+        frames = camera_frames(cfg)
+        while True:
+            employee = wait_for_employee(cfg, engine, gallery, frames, preview)
+            if employee is None:
+                break
+            if cfg.liveness.enabled:
+                result = verify_liveness(cfg, engine, sensor, antispoof, gallery, employee,
+                                         frames, preview)
+            else:
+                from checkpoint.liveness import LivenessResult
+
+                result = LivenessResult(True)
+            if result.reason == "cancelado":
+                break
+            gestures = ", ".join(c.value.lower() for c in result.challenges) or "-"
+            if result.passed:
+                print(f"APROVADO: {employee.name} | similaridade {employee.score:.2f} | "
+                      f"rosto real {result.real_score:.2f} | {result.elapsed_s:.1f}s | "
+                      f"desafio: {gestures}")
+                text, color = f"Ponto OK: {employee.name}", GREEN
+            else:
+                print(f"RECUSADO: {employee.name} | {result.reason} | "
+                      f"rosto real {result.real_score:.2f} | {result.elapsed_s:.1f}s | "
+                      f"desafio: {gestures}")
+                text, color = "Recusado - tente de novo", RED
+            if not wait_until_gone(engine, frames, text, color, preview):
+                break
+    except CameraError as exc:
+        log.error("%s", exc)
+        return 1
+    except KeyboardInterrupt:
+        pass
+    finally:
+        sensor.close()
+        if preview:
+            import cv2
+
+            cv2.destroyAllWindows()
+    return 0
+
+
+def cmd_liveness_diag(args: argparse.Namespace) -> int:
+    import time
+
+    from checkpoint.app import GREEN, RED, YELLOW, camera_frames, check_face, show_mirrored
+    from checkpoint.camera import CameraError
+
+    cfg = args.config
+    from checkpoint.app import build_engine
+
+    engine = build_engine(cfg)
+    sensor, antispoof = _liveness_parts(cfg)
+    threshold = cfg.liveness.real_threshold
+    print("Diagnóstico da prova de vida. Mostre um rosto real, uma foto e o celular.")
+    print(f"'rosto real' acima de {threshold} conta como rosto verdadeiro. Q para sair.")
+    last_print = 0.0
+    try:
+        for frame in camera_frames(cfg):
+            face, problem = check_face(engine.detect(frame), cfg.recognition.min_face_size)
+            if face is None or problem:
+                if not show_mirrored(frame, face, YELLOW, problem or "Nenhum rosto"):
+                    break
+                continue
+            now = time.monotonic()
+            signals = sensor.measure(frame, int(now * 1000))
+            real = antispoof.score(frame, face)
+            blink = f"{signals.blink:.2f}" if signals else "-"
+            yaw = f"{signals.yaw:+.0f}" if signals else "-"
+            line = f"rosto real {real:.2f} | piscada {blink} | giro {yaw} graus"
+            if now - last_print >= 0.5:
+                print(line)
+                last_print = now
+            ok = real >= threshold
+            if not show_mirrored(frame, face, GREEN if ok else RED,
+                                 "REAL" if ok else "SUSPEITO", line):
+                break
+    except CameraError as exc:
+        log.error("%s", exc)
+        return 1
+    except KeyboardInterrupt:
+        pass
+    finally:
+        sensor.close()
+        import cv2
+
+        cv2.destroyAllWindows()
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="checkpoint", description=__doc__)
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
@@ -258,6 +379,15 @@ def build_parser() -> argparse.ArgumentParser:
     recognize.add_argument("--sem-preview", action="store_true",
                            help="não abre a janela; só imprime no terminal")
     recognize.set_defaults(func=cmd_recognize)
+
+    punch = sub.add_parser("ponto", help="simula a batida: reconhecimento + prova de vida")
+    punch.add_argument("--sem-preview", action="store_true",
+                       help="não abre a janela (o desafio não aparece na tela)")
+    punch.set_defaults(func=cmd_punch)
+
+    sub.add_parser("vivacidade",
+                   help="mostra ao vivo os sinais da prova de vida, para calibrar").set_defaults(
+        func=cmd_liveness_diag)
 
     bench = sub.add_parser("benchmark", help="mede o tempo de cada etapa do reconhecimento")
     bench.add_argument("--frames", type=int, default=100, help="frames a medir (padrão: 100)")

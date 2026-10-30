@@ -47,6 +47,15 @@ class RecognitionConfig:
 
 
 @dataclass(frozen=True)
+class LivenessConfig:
+    enabled: bool = True
+    challenges: int = 1
+    timeout_s: float = 6.0
+    real_threshold: float = 0.6
+    min_passive_frames: int = 3
+
+
+@dataclass(frozen=True)
 class LoggingConfig:
     level: str = "INFO"
     dir: Path = Path("logs")
@@ -58,6 +67,7 @@ class Config:
     storage: StorageConfig = field(default_factory=StorageConfig)
     models: ModelsConfig = field(default_factory=ModelsConfig)
     recognition: RecognitionConfig = field(default_factory=RecognitionConfig)
+    liveness: LivenessConfig = field(default_factory=LivenessConfig)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
 
 
@@ -97,6 +107,15 @@ def _validate(config: Config) -> None:
         raise ConfigError("[recognition] min_face_size deve ser positivo")
     if not 1 <= rec.enroll_samples <= 30:
         raise ConfigError("[recognition] enroll_samples deve estar entre 1 e 30")
+    live = config.liveness
+    if not 1 <= live.challenges <= 2:
+        raise ConfigError("[liveness] challenges deve ser 1 ou 2")
+    if live.timeout_s <= 0:
+        raise ConfigError("[liveness] timeout_s deve ser positivo")
+    if not 0.0 < live.real_threshold < 1.0:
+        raise ConfigError("[liveness] real_threshold deve estar entre 0 e 1")
+    if live.min_passive_frames < 1:
+        raise ConfigError("[liveness] min_passive_frames deve ser pelo menos 1")
     if config.logging.level.upper() not in {"DEBUG", "INFO", "WARNING", "ERROR"}:
         raise ConfigError("[logging] level deve ser DEBUG, INFO, WARNING ou ERROR")
 

@@ -1,0 +1,15 @@
+MiniFASNet (Silent-Face-Anti-Spoofing)
+Copyright Minivision AI
+https://github.com/minivision-ai/Silent-Face-Anti-Spoofing
+Licensed under the Apache License, Version 2.0 (see LICENSE in this folder).
+
+Modifications: the original PyTorch weights
+  resources/anti_spoof_models/2.7_80x80_MiniFASNetV2.pth
+  resources/anti_spoof_models/4_0_0_80x80_MiniFASNetV1SE.pth
+were converted to ONNX (opset 13) without changing the weights, producing
+  minifasnet_v2_2.7_80x80.onnx
+  minifasnet_v1se_4.0_80x80.onnx
+The conversion script is tools/convert_minifasnet.py in this repository.
+
+Input: 1x3x80x80 float32, BGR, pixel values 0-255 (not normalized).
+Output: 3 logits; class 1 is "real face".

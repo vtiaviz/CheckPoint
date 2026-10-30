@@ -29,6 +29,19 @@ min_face_size = 80
 # Amostras capturadas no cadastro de cada funcionário.
 enroll_samples = 7
 
+[liveness]
+# Prova de vida antes de aceitar a batida.
+enabled = true
+# Desafios sorteados por batida (1 ou 2): piscar e/ou virar o rosto para um lado.
+challenges = 1
+# Tempo máximo, em segundos, para concluir a prova de vida.
+timeout_s = 6.0
+# Probabilidade mínima de rosto real (0 a 1) no anti-spoofing passivo. Subir barra mais
+# fotos e telas; descer reduz recusas de pessoas reais. Calibre com: python -m checkpoint vivacidade
+real_threshold = 0.6
+# Frames de frente necessários para o anti-spoofing decidir.
+min_passive_frames = 3
+
 [logging]
 level = "INFO"
 dir = "logs"

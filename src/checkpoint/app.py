@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import random
 import statistics
 import time
 from collections import Counter, deque
@@ -16,6 +17,15 @@ from checkpoint.camera import open_camera
 from checkpoint.config import Config
 from checkpoint.face import Face, FaceEngine, normalize
 from checkpoint.gallery import Gallery, Match
+from checkpoint.liveness import (
+    FRONTAL_YAW,
+    ChallengeTracker,
+    LandmarkSensor,
+    LivenessResult,
+    PassiveAntiSpoof,
+    Status,
+    pick_challenges,
+)
 from checkpoint.models import DETECTOR, RECOGNIZER, ensure_model
 
 log = logging.getLogger(__name__)
@@ -265,3 +275,146 @@ def benchmark(
         result.embed_ms.append((t2 - t1) * 1000)
         result.match_ms.append((t3 - t2) * 1000)
     return result
+
+
+# ---------------------------------------------------------------- batida com prova de vida
+
+LEAVE_TIMEOUT_S = 1.0  # sem rosto por este tempo = a pessoa saiu do totem
+MISSING_FACE_S = 1.5  # rosto sumiu durante a prova de vida
+
+
+def show_mirrored(frame: np.ndarray, face: Face | None, color: tuple[int, int, int],
+                  text: str, detail: str = "") -> bool:
+    """Mostra a imagem espelhada, como num espelho: "esquerda" fica à esquerda da tela."""
+    view = cv2.flip(frame, 1)
+    if face is not None:
+        x, y, w, h = face.box
+        x = view.shape[1] - x - w
+        cv2.rectangle(view, (x, y), (x + w, y + h), color, 2)
+    draw(view, None, color, text)
+    if detail:
+        cv2.putText(view, detail, (10, view.shape[0] - 12), cv2.FONT_HERSHEY_SIMPLEX, 0.55,
+                    color, 1)
+    return show(view)
+
+
+def wait_for_employee(
+    cfg: Config, engine: FaceEngine, gallery: Gallery, frames: Iterator[np.ndarray],
+    preview: bool = True,
+) -> Match | None:
+    """Espera até alguém ser reconhecido de forma estável (votação entre frames).
+
+    Devolve None se a câmera parar ou o usuário sair.
+    """
+    rec = cfg.recognition
+    votes: deque[int | None] = deque(maxlen=VOTE_WINDOW)
+    last: dict[int, Match] = {}
+    for frame in frames:
+        face, problem = check_face(engine.detect(frame), rec.min_face_size)
+        if face is None:
+            votes.clear()
+        elif problem is None:
+            match = gallery.identify(engine.embed(frame, face), rec.match_threshold)
+            key = match.employee_id if match else None
+            if match:
+                last[key] = match
+            votes.append(key)
+            winner, count = Counter(votes).most_common(1)[0]
+            if winner is not None and count >= VOTES_NEEDED:
+                return last[winner]
+        if preview:
+            text = problem or ("Identificando..." if face is not None else "Aproxime-se")
+            if not show_mirrored(frame, face, YELLOW, text):
+                return None
+    return None
+
+
+def verify_liveness(
+    cfg: Config,
+    engine: FaceEngine,
+    sensor: LandmarkSensor,
+    antispoof: PassiveAntiSpoof,
+    gallery: Gallery,
+    employee: Match,
+    frames: Iterator[np.ndarray],
+    preview: bool = True,
+    clock: Callable[[], float] = time.monotonic,
+    rng: random.Random | None = None,
+) -> LivenessResult:
+    """Prova de vida de quem acabou de ser reconhecido.
+
+    Aprova quando todos os desafios sorteados forem cumpridos, a mediana do anti-spoofing
+    passivo nos frames de frente passar do limiar e ninguém mais for reconhecido no meio.
+    """
+    live, rec = cfg.liveness, cfg.recognition
+    challenges = pick_challenges(live.challenges, rng)
+    trackers = [ChallengeTracker(c) for c in challenges]
+    real_scores: list[float] = []
+    start = last_face = clock()
+
+    def result(passed: bool, reason: str = "") -> LivenessResult:
+        score = float(np.median(real_scores)) if real_scores else 0.0
+        return LivenessResult(passed, reason, score, clock() - start, challenges)
+
+    for frame in frames:
+        now = clock()
+        if now - start > live.timeout_s:
+            return result(False, "tempo esgotado")
+        current = next((t for t in trackers if t.status is Status.PENDING), None)
+
+        face, problem = check_face(engine.detect(frame), rec.min_face_size)
+        if face is None:
+            if now - last_face > MISSING_FACE_S:
+                return result(False, "o rosto saiu da câmera")
+        else:
+            last_face = now
+        if problem == "Apenas uma pessoa por vez":
+            return result(False, "mais de uma pessoa diante da câmera")
+
+        signals = None
+        if face is not None and problem is None:
+            ranked = gallery.scores(engine.embed(frame, face))
+            other = next((m for m in ranked if m.employee_id != employee.employee_id), None)
+            if other is not None and other.score >= rec.match_threshold:
+                return result(False, f"outra pessoa apareceu ({other.name})")
+
+            signals = sensor.measure(frame, int(now * 1000))
+            if signals is not None and abs(signals.yaw) < FRONTAL_YAW:
+                # O anti-spoofing foi treinado com rostos de frente.
+                real_scores.append(antispoof.score(frame, face))
+            if signals is not None and current is not None:
+                if current.update(signals) is Status.FAILED:
+                    return result(False, current.reason)
+                current = next((t for t in trackers if t.status is Status.PENDING), None)
+
+        if current is None and len(real_scores) >= live.min_passive_frames:
+            score = float(np.median(real_scores))
+            if score < live.real_threshold:
+                return result(False, f"imagem não parece de um rosto real ({score:.2f})")
+            return result(True)
+
+        if preview:
+            text = current.challenge.screen_text if current else "Olhe para a camera"
+            detail = f"{employee.name} - {now - start:.1f}s"
+            if not show_mirrored(frame, face, YELLOW if problem else GREEN, text, detail):
+                return result(False, "cancelado")
+    return result(False, "a câmera parou")
+
+
+def wait_until_gone(engine: FaceEngine, frames: Iterator[np.ndarray], text: str,
+                    color: tuple[int, int, int], preview: bool = True,
+                    clock: Callable[[], float] = time.monotonic) -> bool:
+    """Mantém o resultado na tela até a pessoa sair; False se o usuário pediu para sair."""
+    gone_since: float | None = None
+    for frame in frames:
+        faces = engine.detect(frame)
+        now = clock()
+        if faces:
+            gone_since = None
+        elif gone_since is None:
+            gone_since = now
+        elif now - gone_since >= LEAVE_TIMEOUT_S:
+            return True
+        if preview and not show_mirrored(frame, faces[0] if faces else None, color, text):
+            return False
+    return False
