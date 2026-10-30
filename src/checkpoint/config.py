@@ -34,8 +34,16 @@ class StorageConfig:
 
 
 @dataclass(frozen=True)
+class ModelsConfig:
+    dir: Path = Path("models")
+
+
+@dataclass(frozen=True)
 class RecognitionConfig:
     match_threshold: float = 0.363
+    detect_score: float = 0.8
+    min_face_size: int = 80
+    enroll_samples: int = 7
 
 
 @dataclass(frozen=True)
@@ -48,6 +56,7 @@ class LoggingConfig:
 class Config:
     camera: CameraConfig = field(default_factory=CameraConfig)
     storage: StorageConfig = field(default_factory=StorageConfig)
+    models: ModelsConfig = field(default_factory=ModelsConfig)
     recognition: RecognitionConfig = field(default_factory=RecognitionConfig)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
 
@@ -79,8 +88,15 @@ def _validate(config: Config) -> None:
         raise ConfigError("[camera] index não pode ser negativo")
     if cam.width <= 0 or cam.height <= 0 or cam.fps <= 0:
         raise ConfigError("[camera] width, height e fps devem ser positivos")
-    if not 0.0 < config.recognition.match_threshold < 1.0:
+    rec = config.recognition
+    if not 0.0 < rec.match_threshold < 1.0:
         raise ConfigError("[recognition] match_threshold deve estar entre 0 e 1")
+    if not 0.0 < rec.detect_score < 1.0:
+        raise ConfigError("[recognition] detect_score deve estar entre 0 e 1")
+    if rec.min_face_size <= 0:
+        raise ConfigError("[recognition] min_face_size deve ser positivo")
+    if not 1 <= rec.enroll_samples <= 30:
+        raise ConfigError("[recognition] enroll_samples deve estar entre 1 e 30")
     if config.logging.level.upper() not in {"DEBUG", "INFO", "WARNING", "ERROR"}:
         raise ConfigError("[logging] level deve ser DEBUG, INFO, WARNING ou ERROR")
 

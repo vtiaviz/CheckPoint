@@ -18,5 +18,10 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - run: pip install -e ".[dev]"
+      - uses: actions/cache@v4
+        with:
+          path: models
+          key: models-yunet2023mar-sface2021dec
+      - run: python -m checkpoint modelos
       - run: ruff check .
       - run: pytest
